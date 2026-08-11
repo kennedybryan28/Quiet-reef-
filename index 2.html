@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Quiet Reef</title>
+<style>
+:root{
+  --panel:rgba(3,20,34,.82); --line:rgba(255,255,255,.14);
+  --text:#f7fbff; --muted:#c5dce7; --good:#61e2b3; --warn:#ffd16c; --bad:#ff8585;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#041b2c;color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+button,input{font:inherit}
+#app{position:relative;width:100vw;height:100vh;overflow:hidden;background:#04283d}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+.top{position:absolute;z-index:20;top:14px;left:18px;right:18px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}
+.brand{font-size:22px;font-weight:800;text-shadow:0 2px 10px rgba(0,0,0,.4)}
+.gear{pointer-events:auto;width:47px;height:47px;border-radius:15px;border:1px solid var(--line);background:var(--panel);color:white;font-size:21px;backdrop-filter:blur(12px)}
+.status{position:absolute;z-index:20;left:18px;top:75px;width:215px;padding:15px;border-radius:18px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(12px)}
+.kicker{font-size:11px;letter-spacing:.12em;color:var(--muted)}
+.value{font-size:19px;font-weight:800;margin-top:3px}
+.good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.sep{height:1px;background:var(--line);margin:12px 0}
+.meter{height:9px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:7px}
+.meterFill{height:100%;width:0;background:var(--good);transition:width .08s linear,background .2s}
+.controls{position:absolute;z-index:20;left:18px;right:18px;bottom:16px;padding:13px;border-radius:20px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(14px)}
+.modes{display:flex;gap:8px;flex-wrap:wrap}
+.mode{border:1px solid var(--line);background:rgba(255,255,255,.05);color:white;padding:9px 13px;border-radius:12px}
+.mode.active{background:#b7f0d9;color:#083b38;font-weight:800}
+.noise{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;margin-top:10px}
+.noise input{width:100%}
+.small{font-size:12px;color:var(--muted)}
+.settings{display:none;position:absolute;z-index:30;right:18px;top:72px;width:min(330px,calc(100vw - 36px));padding:16px;border:1px solid var(--line);border-radius:18px;background:rgba(3,20,34,.94);backdrop-filter:blur(14px)}
+.settings.open{display:block}
+.settings label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
+.settings input,.settings button{width:100%}
+.settings button{padding:10px;margin-top:9px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.05);color:white}
+.overlay{position:absolute;z-index:40;inset:0;display:grid;place-items:center;padding:20px;background:linear-gradient(rgba(1,16,28,.02),rgba(1,16,28,.35));backdrop-filter:blur(2px)}
+.card{width:min(520px,100%);padding:24px;border-radius:25px;border:1px solid var(--line);background:rgba(3,20,34,.84);backdrop-filter:blur(16px);box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.card h1{font-size:36px;margin:0 0 6px}.card p{color:var(--muted);line-height:1.45}
+.primary,.secondary{width:100%;padding:13px;border-radius:13px;margin-top:9px}
+.primary{border:0;background:white;color:#073044;font-weight:800}.secondary{border:1px solid var(--line);background:rgba(255,255,255,.05);color:white}
+.hide{display:none!important}
+@media(max-width:760px){
+  .top{left:10px;right:10px;top:9px}.brand{font-size:18px}
+  .status{left:10px;top:61px;width:170px;padding:11px}
+  .value{font-size:17px}.controls{left:8px;right:8px;bottom:8px;padding:9px}
+  .mode{padding:8px 9px;font-size:12px}.noise{grid-template-columns:1fr}.noise span:last-child{text-align:right}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<canvas id="reef"></canvas>
+
+<div class="top">
+  <div class="brand">≋ &nbsp; Quiet Reef</div>
+  <button class="gear" id="gear">⚙</button>
+</div>
+
+<div class="status">
+  <div class="kicker">LISTENING</div>
+  <div class="value" id="listening">Ambient mode</div>
+  <div class="sep"></div>
+  <div class="kicker">NOISE LEVEL</div>
+  <div class="value good" id="noiseState">Good</div>
+  <div class="meter"><div class="meterFill" id="meterFill"></div></div>
+  <div class="sep"></div>
+  <div class="kicker">ANIMALS</div>
+  <div class="value"><span id="animalCount">30</span> / 30</div>
+  <div class="sep"></div>
+  <div class="kicker">REEF STATUS</div>
+  <div class="value good" id="reefState">♥ Happy</div>
+</div>
+
+<div class="controls">
+  <div class="modes">
+    <button class="mode active" data-mode="silent">Silent</button>
+    <button class="mode" data-mode="whisper">Whisper</button>
+    <button class="mode" data-mode="low">Low Conversation</button>
+    <button class="mode" data-mode="custom">Custom</button>
+  </div>
+  <div class="noise">
+    <span class="small">Noise goal</span>
+    <input id="noiseSlider" type="range" min="0" max="100" value="14">
+    <span id="noiseReadout" class="small">14 / 100</span>
+  </div>
+</div>
+
+<div id="settings" class="settings">
+  <strong>Teacher settings</strong>
+  <label>Microphone sensitivity</label>
+  <input id="sensitivity" type="range" min="60" max="180" value="100">
+  <label>Custom threshold</label>
+  <input id="custom" type="range" min="5" max="70" value="35">
+  <button id="calibrate">Calibrate to current room</button>
+  <button id="end">End session</button>
+  <button id="close">Close</button>
+</div>
+
+<div id="overlay" class="overlay">
+  <div class="card">
+    <h1>Keep the reef at ease.</h1>
+    <p>A living classroom aquarium. Every animal moves independently. Sustained noise gradually scares creatures away; quiet brings them back.</p>
+    <button id="startMic" class="primary">Start with microphone</button>
+    <button id="preview" class="secondary">Preview without microphone</button>
+    <div class="small" style="margin-top:10px">Quiet Reef measures overall sound level only. It does not record or transcribe speech.</div>
+  </div>
+</div>
+</div>
+
+<script>
+(()=>{
+const c=document.getElementById('reef'),x=c.getContext('2d');
+const dpr=Math.min(devicePixelRatio||1,2);
+let W=0,H=0;
+function resize(){W=innerWidth;H=innerHeight;c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';x.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), rand=(a,b)=>a+Math.random()*(b-a);
+const thresholds={silent:20,whisper:36,low:56};
+let mode='silent',customThreshold=35,sens=1,simNoise=14,currentNoise=14;
+let mic=false,stream=null,audioCtx=null,analyser=null,audioData=null,noiseFloor=.006;
+
+const fishStyles=[
+  ['#1577c9','#092e78','#ffd04d'],['#f58c2b','#e34631','#fff0b2'],
+  ['#50c5b5','#126b83','#f6d456'],['#8c72df','#3b2b91','#f7c749'],
+  ['#ec5f70','#8e2749','#ffd56f'],['#ffd442','#d49a13','#1c5078'],
+  ['#5ea8e8','#1b4e93','#f4f4e8'],['#56bb76','#17766c','#ffc967']
+];
+
+class Bubble{
+ constructor(){this.reset(true)}
+ reset(first=false){this.px=rand(0,W);this.py=first?rand(0,H):H+10;this.r=rand(1.5,5.5);this.v=rand(12,32);this.phase=rand(0,6.28)}
+ update(dt,t){this.py-=this.v*dt;this.px+=Math.sin(t/1300+this.phase)*3*dt;if(this.py<-10)this.reset()}
+ draw(){x.strokeStyle='rgba(225,250,255,.34)';x.lineWidth=1;x.beginPath();x.arc(this.px,this.py,this.r,0,Math.PI*2);x.stroke()}
+}
+const bubbles=Array.from({length:52},()=>new Bubble());
+
+class Creature{
+ constructor(type,opt={}){
+   this.type=type;this.size=opt.size||rand(24,46);this.depth=opt.depth||rand(.58,1.15);
+   this.px=opt.px??rand(-120,W+120);this.py=opt.py??rand(H*.12,H*.67);
+   this.speed=opt.speed||({fish:rand(26,56),turtle:16,ray:18,jelly:7,shark:28}[type]);
+   this.vx=(Math.random()<.5?-1:1)*this.speed;this.vy=rand(-3,3);
+   this.phase=rand(0,6.28);this.style=fishStyles[Math.floor(rand(0,fishStyles.length))];
+   this.gone=false;this.scared=false;this.returnAt=0;
+ }
+ scare(){if(this.gone)return;this.scared=true;this.vx=(Math.random()<.5?-1:1)*Math.max(105,this.speed*3.6);this.vy*=.15}
+ update(dt,t){
+   if(this.gone){
+     if(t>this.returnAt&&quietEnough()){
+       const left=Math.random()<.5;this.px=left?-150:W+150;this.py=rand(H*.12,H*.62);
+       this.vx=(left?1:-1)*this.speed;this.gone=false;this.scared=false;
+     } else return;
+   }
+   this.phase+=dt*(.55+this.speed/65);
+   if(this.type==='jelly'){
+     this.vx=clamp(this.vx+Math.sin(this.phase*.4)*.02,-10,10);
+     this.vy=clamp(this.vy+Math.sin(this.phase*.8)*.03,-8,8);
+   }else if(!this.scared){
+     const sign=Math.sign(this.vx)||1;this.vx+=(sign*this.speed-this.vx)*.5*dt;
+     this.vy=clamp(this.vy+Math.sin(this.phase*.62)*.65*dt,-7,7);
+   }
+   this.px+=this.vx*dt;this.py+=(this.vy+Math.sin(this.phase)*2)*dt;
+   if(!this.scared){
+     const top=H*.08,bottom=H*.72;
+     if(this.py<top){this.py=top;this.vy=Math.abs(this.vy)+1.2}
+     if(this.py>bottom){this.py=bottom;this.vy=-Math.abs(this.vy)-1.2}
+     // smooth continuous ecosystem: animals leave and new ones enter naturally
+     if(this.px>W+170){this.px=-170;this.py=rand(top,bottom)}
+     if(this.px<-170){this.px=W+170;this.py=rand(top,bottom)}
+   }else if(this.px>W+190||this.px<-190){
+     this.gone=true;this.returnAt=t+rand(2800,6500);
+   }
+ }
+ draw(){
+   if(this.gone)return;
+   x.save();x.translate(this.px,this.py);x.scale((this.vx>=0?1:-1)*this.depth,this.depth);
+   if(this.type==='fish')fish(this.size,this.style);
+   if(this.type==='turtle')turtle(this.size*1.85);
+   if(this.type==='ray')ray(this.size*2.0);
+   if(this.type==='jelly')jelly(this.size*1.55);
+   if(this.type==='shark')shark(this.size*2.25);
+   x.restore();
+ }
+}
+
+function shadow(){x.shadowColor='rgba(0,0,0,.28)';x.shadowBlur=10;x.shadowOffsetY=4}
+function fish(s,[body,dark,accent]){
+ shadow();
+ // tail
+ let g=x.createLinearGradient(-s*1.3,0,-s*.55,0);g.addColorStop(0,dark);g.addColorStop(1,accent);
+ x.fillStyle=g;x.beginPath();x.moveTo(-s*.72,0);x.quadraticCurveTo(-s*1.28,-s*.52,-s*1.22,-s*.18);x.lineTo(-s*1.10,0);x.lineTo(-s*1.22,s*.18);x.quadraticCurveTo(-s*1.28,s*.52,-s*.72,0);x.fill();
+ // body gradient
+ g=x.createLinearGradient(-s*.7,-s*.4,s*.8,s*.4);g.addColorStop(0,dark);g.addColorStop(.45,body);g.addColorStop(1,accent);
+ x.fillStyle=g;x.beginPath();x.ellipse(0,0,s*.82,s*.43,0,0,Math.PI*2);x.fill();
+ // fins
+ x.fillStyle=dark;x.beginPath();x.moveTo(-s*.05,-s*.32);x.quadraticCurveTo(s*.1,-s*.74,s*.38,-s*.32);x.closePath();x.fill();
+ x.beginPath();x.moveTo(s*.05,s*.30);x.quadraticCurveTo(s*.18,s*.62,s*.42,s*.27);x.closePath();x.fill();
+ // highlight + stripe
+ x.fillStyle='rgba(255,255,255,.16)';x.beginPath();x.ellipse(s*.05,-s*.15,s*.52,s*.16,0,0,Math.PI*2);x.fill();
+ x.strokeStyle='rgba(255,255,255,.62)';x.lineWidth=Math.max(2,s*.055);
+ x.beginPath();x.moveTo(-s*.12,-s*.34);x.quadraticCurveTo(-s*.03,0,-s*.12,s*.34);x.stroke();
+ // eye
+ x.fillStyle='#fff';x.beginPath();x.arc(s*.57,-s*.11,s*.07,0,Math.PI*2);x.fill();
+ x.fillStyle='#071b27';x.beginPath();x.arc(s*.59,-s*.11,s*.033,0,Math.PI*2);x.fill();
+ // mouth
+ x.strokeStyle='rgba(5,25,35,.65)';x.lineWidth=1.4;x.beginPath();x.arc(s*.73,s*.04,s*.10,2.7,4.2);x.stroke();
+ x.shadowBlur=0;x.shadowOffsetY=0;
+}
+function turtle(s){
+ shadow();
+ x.fillStyle='#6f9469';
+ // rear/flippers
+ [[-.25,-.12,-.78,-.55],[-.25,.12,-.78,.55],[.28,-.13,.58,-.52],[.28,.13,.58,.52]].forEach(p=>{
+   x.beginPath();x.moveTo(p[0]*s,p[1]*s);x.quadraticCurveTo(p[2]*s,p[3]*s,p[0]*s*1.08,p[1]*s*.15);x.closePath();x.fill()
+ });
+ let g=x.createRadialGradient(-s*.15,-s*.12,2,0,0,s*.6);g.addColorStop(0,'#b08e55');g.addColorStop(1,'#57452f');
+ x.fillStyle=g;x.beginPath();x.ellipse(0,0,s*.57,s*.39,0,0,Math.PI*2);x.fill();
+ x.strokeStyle='rgba(220,194,130,.55)';x.lineWidth=2;
+ for(let i=-2;i<=2;i++){x.beginPath();x.ellipse(i*s*.13,0,s*.20,s*.30,0,0,Math.PI*2);x.stroke()}
+ x.fillStyle='#77a476';x.beginPath();x.ellipse(s*.72,0,s*.25,s*.17,0,0,Math.PI*2);x.fill();
+ x.fillStyle='#0a2024';x.beginPath();x.arc(s*.81,-s*.05,s*.025,0,Math.PI*2);x.fill();
+ x.shadowBlur=0;x.shadowOffsetY=0;
+}
+function ray(s){
+ shadow();let g=x.createLinearGradient(0,-s*.5,0,s*.5);g.addColorStop(0,'#8da8b5');g.addColorStop(1,'#425f70');
+ x.fillStyle=g;x.beginPath();x.moveTo(-s*.86,0);x.quadraticCurveTo(-s*.28,-s*.74,0,-s*.18);x.quadraticCurveTo(s*.28,-s*.74,s*.86,0);x.quadraticCurveTo(s*.28,s*.60,0,s*.18);x.quadraticCurveTo(-s*.28,s*.60,-s*.86,0);x.fill();
+ x.strokeStyle='#3a5667';x.lineWidth=3;x.beginPath();x.moveTo(0,s*.15);x.lineTo(s*1.18,s*.44);x.stroke();
+ x.fillStyle='#0a2029';x.beginPath();x.arc(s*.21,-s*.10,s*.024,0,Math.PI*2);x.arc(-s*.21,-s*.10,s*.024,0,Math.PI*2);x.fill();
+ x.shadowBlur=0;x.shadowOffsetY=0;
+}
+function jelly(s){
+ shadow();let g=x.createRadialGradient(0,-s*.16,0,0,0,s*.55);g.addColorStop(0,'rgba(245,223,255,.94)');g.addColorStop(.5,'rgba(192,132,230,.78)');g.addColorStop(1,'rgba(118,76,184,.55)');
+ x.fillStyle=g;x.beginPath();x.arc(0,0,s*.50,Math.PI,0);x.lineTo(s*.5,0);x.quadraticCurveTo(0,s*.22,-s*.5,0);x.closePath();x.fill();
+ x.strokeStyle='rgba(228,198,246,.72)';x.lineWidth=2;
+ for(let i=-2;i<=2;i++){x.beginPath();x.moveTo(i*s*.15,s*.08);x.bezierCurveTo(i*s*.20,s*.45,(i+.4)*s*.12,s*.72,i*s*.11,s);x.stroke()}
+ x.shadowBlur=0;x.shadowOffsetY=0;
+}
+function shark(s){
+ shadow();let g=x.createLinearGradient(0,-s*.3,0,s*.3);g.addColorStop(0,'#7da4b7');g.addColorStop(.58,'#527a90');g.addColorStop(1,'#d3e5ea');
+ x.fillStyle=g;x.beginPath();x.ellipse(0,0,s*.72,s*.24,0,0,Math.PI*2);x.fill();
+ x.fillStyle='#587d90';x.beginPath();x.moveTo(-s*.65,0);x.lineTo(-s*.99,-s*.35);x.lineTo(-s*.90,0);x.lineTo(-s*.99,s*.35);x.closePath();x.fill();
+ x.beginPath();x.moveTo(-s*.04,-s*.19);x.lineTo(s*.18,-s*.59);x.lineTo(s*.25,-s*.14);x.closePath();x.fill();
+ x.fillStyle='#0b2028';x.beginPath();x.arc(s*.52,-s*.08,s*.022,0,Math.PI*2);x.fill();
+ x.strokeStyle='rgba(40,65,75,.7)';x.lineWidth=1.4;for(let i=0;i<3;i++){x.beginPath();x.moveTo(s*(.38+i*.05),-s*.02);x.lineTo(s*(.34+i*.05),s*.12);x.stroke()}
+ x.shadowBlur=0;x.shadowOffsetY=0;
+}
+
+const creatures=[];
+for(let i=0;i<22;i++)creatures.push(new Creature('fish',{size:rand(20,45),depth:rand(.55,1.12)}));
+creatures.push(new Creature('turtle',{size:45,depth:1.0,py:H*.22}));
+creatures.push(new Creature('ray',{size:40,depth:.90,py:H*.18}));
+creatures.push(new Creature('jelly',{size:30,depth:.83,py:H*.20}));
+creatures.push(new Creature('jelly',{size:25,depth:.68,py:H*.34}));
+creatures.push(new Creature('shark',{size:38,depth:.78,py:H*.34}));
+for(let i=0;i<3;i++)creatures.push(new Creature('fish',{size:16,depth:.5,py:H*.30+i*12,speed:38+i}));
+const TOTAL=creatures.length;
+
+function background(t){
+ let g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0a9cc6');g.addColorStop(.35,'#08718f');g.addColorStop(.70,'#06485f');g.addColorStop(1,'#03293c');
+ x.fillStyle=g;x.fillRect(0,0,W,H);
+ // surface shimmer
+ x.save();x.globalAlpha=.18;
+ for(let i=0;i<8;i++){
+   const cx=W*(i/7)+Math.sin(t/2200+i)*32;
+   let rg=x.createLinearGradient(cx,0,cx+110,H*.58);rg.addColorStop(0,'rgba(239,255,255,.62)');rg.addColorStop(1,'rgba(239,255,255,0)');
+   x.fillStyle=rg;x.beginPath();x.moveTo(cx-16,0);x.lineTo(cx+20,0);x.lineTo(cx+145,H*.58);x.lineTo(cx+54,H*.58);x.closePath();x.fill();
+ }
+ x.restore();
+ // distant reef
+ for(let i=0;i<14;i++){x.fillStyle=i%2?'rgba(12,70,76,.48)':'rgba(10,59,68,.48)';x.beginPath();x.ellipse((i/13)*W,H*.65+Math.sin(i)*15,W*.08,H*.10,0,0,Math.PI*2);x.fill()}
+ // sand channel
+ x.fillStyle='#b8a77b';x.beginPath();x.moveTo(W*.41,H);x.lineTo(W*.60,H);x.lineTo(W*.55,H*.68);x.lineTo(W*.46,H*.68);x.closePath();x.fill();
+ // rocks
+ [[.00,.76,.22,.21],[.17,.84,.19,.15],[.72,.83,.21,.15],[.87,.73,.22,.21]].forEach((r,i)=>{
+   let rg=x.createRadialGradient(W*(r[0]+r[2]*.38),H*(r[1]+r[3]*.30),2,W*(r[0]+r[2]/2),H*(r[1]+r[3]/2),W*r[2]*.6);
+   rg.addColorStop(0,i%2?'#5b8178':'#52766f');rg.addColorStop(1,'#1d4e55');x.fillStyle=rg;x.beginPath();x.ellipse(W*(r[0]+r[2]/2),H*(r[1]+r[3]/2),W*r[2]/2,H*r[3]/2,0,0,Math.PI*2);x.fill();
+ });
+ coral(W*.05,H*.91,1.0,'#c04d9c',t);coral(W*.16,H*.92,.8,'#ee8a5e',t);coral(W*.29,H*.92,.85,'#8065c2',t);
+ coral(W*.73,H*.92,.85,'#e56e58',t);coral(W*.86,H*.91,1.0,'#8f59b9',t);coral(W*.96,H*.90,.9,'#df6093',t);
+ kelp([.03,.12,.25,.76,.88,.96],t);
+}
+function coral(cx,cy,sc,col,t){
+ x.strokeStyle=col;x.lineCap='round';x.lineWidth=8*sc;
+ [-3,-2,-1,0,1,2,3].forEach((j,k)=>{x.beginPath();x.moveTo(cx,cy);x.quadraticCurveTo(cx+j*7,cy-35*sc,cx+j*15+Math.sin(t/1500+k)*2,cy-(50+Math.abs(j)*5)*sc);x.stroke()});
+}
+function kelp(list,t){
+ list.forEach((p,idx)=>{for(let k=0;k<3;k++){x.strokeStyle=k===1?'#4d9e62':'#367e55';x.lineWidth=7;x.beginPath();for(let yy=H*.94;yy>H*.43;yy-=11){let xx=W*p+k*10+Math.sin(yy*.025+t/1200+idx)*10;if(yy===H*.94)x.moveTo(xx,yy);else x.lineTo(xx,yy)}x.stroke()}});
+}
+
+function getThreshold(){return mode==='custom'?customThreshold:thresholds[mode]}
+function quietEnough(){return currentNoise<getThreshold()*.9}
+function readMic(){
+ if(!mic||!analyser)return 0;analyser.getByteTimeDomainData(audioData);let sum=0;
+ for(let i=0;i<audioData.length;i++){let v=(audioData[i]-128)/128;sum+=v*v}
+ return clamp(Math.max(0,Math.sqrt(sum/audioData.length)-noiseFloor)*sens*380,0,100);
+}
+async function calibrate(){
+ if(!mic||!analyser)return;let vals=[],tmp=new Uint8Array(analyser.fftSize);
+ for(let n=0;n<20;n++){analyser.getByteTimeDomainData(tmp);let sum=0;for(let i=0;i<tmp.length;i++){let v=(tmp[i]-128)/128;sum+=v*v}vals.push(Math.sqrt(sum/tmp.length));await new Promise(r=>setTimeout(r,40))}
+ vals.sort((a,b)=>a-b);noiseFloor=vals[Math.floor(vals.length*.35)]*.8;
+}
+async function startMic(){
+ try{
+   stream=await navigator.mediaDevices.getUserMedia({audio:true});audioCtx=new (AudioContext||webkitAudioContext)();analyser=audioCtx.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=.65;
+   audioData=new Uint8Array(analyser.fftSize);audioCtx.createMediaStreamSource(stream).connect(analyser);mic=true;await calibrate();document.getElementById('overlay').classList.add('hide');document.getElementById('listening').textContent='Microphone active';
+ }catch(e){alert('Microphone permission was blocked. Use Preview mode or allow microphone access in Safari settings.')}
+}
+
+let loudSince=0,quietSince=performance.now(),lastScare=0,lastReturn=0;
+function noiseLogic(t){
+ const raw=mic?readMic():simNoise;currentNoise=currentNoise*.84+raw*.16;const ratio=currentNoise/getThreshold();
+ document.getElementById('noiseSlider').value=Math.round(currentNoise);document.getElementById('noiseReadout').textContent=Math.round(currentNoise)+' / 100';
+ const fill=document.getElementById('meterFill'),ns=document.getElementById('noiseState'),rs=document.getElementById('reefState');
+ fill.style.width=Math.min(100,currentNoise)+'%';
+ if(ratio<.78){fill.style.background='var(--good)';ns.textContent='Good';ns.className='value good';rs.textContent='♥ Happy';rs.className='value good'}
+ else if(ratio<1.05){fill.style.background='var(--warn)';ns.textContent='Getting lively';ns.className='value warn';rs.textContent='Watching';rs.className='value warn'}
+ else{fill.style.background='var(--bad)';ns.textContent='Too loud';ns.className='value bad';rs.textContent='Disturbed';rs.className='value bad'}
+ if(ratio>1.05){
+   quietSince=0;if(!loudSince)loudSince=t;
+   if(t-loudSince>1800&&t-lastScare>(ratio>1.5?700:1250)){
+     const pool=creatures.filter(q=>!q.gone&&!q.scared);if(pool.length>5){pool[Math.floor(Math.random()*pool.length)].scare();lastScare=t}
+   }
+ }else{
+   loudSince=0;if(!quietSince)quietSince=t;
+   if(t-quietSince>3000&&t-lastReturn>1400){const gone=creatures.filter(q=>q.gone);if(gone.length){gone[Math.floor(Math.random()*gone.length)].returnAt=t;lastReturn=t}}
+ }
+ document.getElementById('animalCount').textContent=creatures.filter(q=>!q.gone).length;
+}
+
+let last=performance.now();
+function frame(t){
+ const dt=Math.min(.033,(t-last)/1000);last=t;background(t);bubbles.forEach(b=>{b.update(dt,t);b.draw()});noiseLogic(t);
+ creatures.sort((a,b)=>a.depth-b.depth).forEach(q=>{q.update(dt,t);q.draw()});requestAnimationFrame(frame)
+}
+
+document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.mode').forEach(z=>z.classList.remove('active'));b.classList.add('active');mode=b.dataset.mode}));
+document.getElementById('noiseSlider').addEventListener('input',e=>{if(!mic)simNoise=+e.target.value});
+document.getElementById('gear').onclick=()=>document.getElementById('settings').classList.toggle('open');
+document.getElementById('close').onclick=()=>document.getElementById('settings').classList.remove('open');
+document.getElementById('sensitivity').oninput=e=>sens=+e.target.value/100;
+document.getElementById('custom').oninput=e=>customThreshold=+e.target.value;
+document.getElementById('calibrate').onclick=calibrate;
+document.getElementById('startMic').onclick=startMic;
+document.getElementById('preview').onclick=()=>{mic=false;simNoise=14;document.getElementById('overlay').classList.add('hide');document.getElementById('listening').textContent='Preview mode'};
+document.getElementById('end').onclick=()=>{if(stream)stream.getTracks().forEach(q=>q.stop());if(audioCtx)audioCtx.close();mic=false;stream=null;audioCtx=null;analyser=null;document.getElementById('overlay').classList.remove('hide')};
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
